@@ -454,7 +454,6 @@ func formatSystemMessage(body chat1.MessageSystem) string {
 }
 
 func newMessageViewValid(g *libkb.GlobalContext, conversationID chat1.ConversationID, m chat1.MessageUnboxedValid) (mv messageView, err error) {
-
 	mv.MessageID = m.ServerHeader.MessageID
 	mv.FromRevokedDevice = m.SenderDeviceRevokedAt != nil
 
@@ -468,6 +467,7 @@ func newMessageViewValid(g *libkb.GlobalContext, conversationID chat1.Conversati
 	case chat1.MessageType_NONE:
 		// NONE is what you get when a message has been deleted.
 		mv.Renderable = true
+		mv.Body = "[deleted]"
 	case chat1.MessageType_TEXT:
 		mv.Renderable = true
 		mv.Body = body.Text().Body
@@ -611,19 +611,21 @@ func newMessageViewError(g *libkb.GlobalContext, conversationID chat1.Conversati
 // newMessageView extracts from a message the parts for display
 // It may fetch the superseding message. So that for example a TEXT message will show its EDIT text.
 func newMessageView(g *libkb.GlobalContext, conversationID chat1.ConversationID, m chat1.MessageUnboxed) (mv messageView, err error) {
-
-	st, err := m.State()
+	state, err := m.State()
 	if err != nil {
 		return mv, fmt.Errorf("unexpected empty message")
 	}
-
-	if st == chat1.MessageUnboxedState_ERROR {
+	switch state {
+	case chat1.MessageUnboxedState_ERROR:
 		return newMessageViewError(g, conversationID, m.Error())
-	}
-	if st == chat1.MessageUnboxedState_OUTBOX {
+	case chat1.MessageUnboxedState_OUTBOX:
 		return newMessageViewOutbox(g, conversationID, m.Outbox())
+	case chat1.MessageUnboxedState_VALID:
+		return newMessageViewValid(g, conversationID, m.Valid())
+	default:
+		return mv, fmt.Errorf("unexpected message state: %v", state)
 	}
-	return newMessageViewValid(g, conversationID, m.Valid())
+
 }
 
 func shortDurationFromNow(t time.Time) string {
